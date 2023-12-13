@@ -6,32 +6,49 @@ import (
 )
 
 type Rotor struct {
-	wiring   string
-	position int
+	wiring        string
+	position      int
+	notch         int
+	turnover      bool
+	turnoverCount int
+}
+
+func NewRotor(wiring string, notch int) *Rotor {
+	return &Rotor{
+		wiring:   wiring,
+		position: 0,
+		notch:    notch,
+		turnover: false,
+	}
+}
+
+func (r *Rotor) rotate() {
+	r.position = (r.position + 1) % 26
+	r.turnoverCount++
+	if r.turnoverCount == r.notch {
+		r.turnover = true
+		r.turnoverCount = 0
+	} else {
+		r.turnover = false
+	}
 }
 
 func (r *Rotor) encrypt(input rune) rune {
-	offset := 'A' - rune(r.position)
-	index := (int(input) - 'A' + int(offset)) % 26
+	offset := int('A' - rune(r.position))
+	index := (int(input) - 'A' + offset) % 26
 	encrypted := r.wiring[index]
-	return rune((int(encrypted)-'A'-int(offset)+26)%26 + 'A')
+	return rune((int(encrypted)-'A'-offset+26)%26 + 'A')
 }
 
 type EnigmaMachine struct {
 	plugboard map[rune]rune
-	rotors    []*Rotor
+	rotor     *Rotor
 }
 
-func NewRotor(wiring string) *Rotor {
-	return &Rotor{
-		wiring:   wiring,
-		position: 0,
-	}
-}
-
-func (e *EnigmaMachine) SetRotorPositions(positions []int) {
-	for i, rotor := range e.rotors {
-		rotor.position = positions[i]
+func NewEnigmaMachine(plugboard map[rune]rune, rotor *Rotor) *EnigmaMachine {
+	return &EnigmaMachine{
+		plugboard: plugboard,
+		rotor:     rotor,
 	}
 }
 
@@ -43,19 +60,12 @@ func (e *EnigmaMachine) encrypt(input string) string {
 			char = plug
 		}
 
-		// Pass through rotors
-		for _, rotor := range e.rotors {
-			char = rotor.encrypt(char)
-		}
-
-		// Pass through reflector (not implemented in this simple example)
-		// In a real Enigma machine, there is a reflector that sends the signal back through the rotors.
-
-		// Reverse pass through rotors
-		for i := len(e.rotors) - 1; i >= 0; i-- {
-			char = e.rotors[i].encrypt(char)
-		}
-
+		// Rotate the rotor before encryption
+		e.rotor.rotate()
+		// Pass through rotor
+		char = e.rotor.encrypt(char)
+		// Pass through rotor again (backwards)
+		char = e.rotor.encrypt(char)
 		// Pass through plugboard again
 		if plug, ok := e.plugboard[char]; ok {
 			char = plug
@@ -74,24 +84,18 @@ func main() {
 		// Add more plugboard connections as needed
 	}
 
-	rotor1 := NewRotor("EKMFLGDQVZNTOWYHXUSPAIBRCJ")
-	rotor2 := NewRotor("AJDKSIRUXBLHWTMCQGZNPYFVOE")
-	rotor3 := NewRotor("BDFHJLCPRTXVZNYEIWGAKMUSQO")
+	// Example rotor wiring (I rotor)
+	rotor := NewRotor("EKMFLGDQVZNTOWYHXUSPAIBRCJ", 16) // The notch is 'Q'
 
-	machine := &EnigmaMachine{
-		plugboard: plugboard,
-		rotors:    []*Rotor{rotor1, rotor2, rotor3},
-	}
+	machine := NewEnigmaMachine(plugboard, rotor)
 
-	plaintext := "HELLO" //H=72, E=69, L=76, O=79
+	plaintext := "HELLO"
 	encrypted := machine.encrypt(strings.ToUpper(plaintext))
 
 	fmt.Printf("Plaintext: %s\n", plaintext)
 	fmt.Printf("Encrypted: %s\n", encrypted)
 
-	// Reset rotor positions
-	machine.SetRotorPositions([]int{0, 0, 0})
-
-	decrypted := machine.encrypt(encrypted)
-	fmt.Printf("Decrypted: %s\n", decrypted)
+	machine.rotor.position = 0
+	machine.encrypt(strings.ToUpper(encrypted))
+	fmt.Printf("Plaintext: %s\n", plaintext)
 }
